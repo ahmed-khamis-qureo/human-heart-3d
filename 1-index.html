@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>The Human Heart - 3D Flip & Mobile</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      background-color: #050203;
+      color: #ffffff;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+      user-select: none;
+      touch-action: none;
+    }
+
+    /* طبقة التقليب السينمائية في البداية وبين الشرائح */
+    .flip-curtain {
+      position: fixed;
+      inset: 0;
+      z-index: 6;
+      pointer-events: none;
+      perspective: 1400px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .flip-plane {
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at center, rgba(220, 38, 38, 0.28), rgba(5, 2, 3, 0.96));
+      transform-style: preserve-3d;
+      opacity: 0;
+      transform: rotateY(0deg) scale(1);
+    }
+
+    .flip-plane.animating {
+      animation: pageFlipFlash 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes pageFlipFlash {
+      0% {
+        opacity: 0.92;
+        transform: rotateY(0deg) scale(1.06);
+      }
+      50% {
+        opacity: 0.75;
+        transform: rotateY(90deg) scale(0.92);
+      }
+      100% {
+        opacity: 0;
+        transform: rotateY(180deg) scale(1);
+      }
+    }
+
+    #webgl-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    .vignette {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at center, transparent 35%, rgba(0, 0, 0, 0.9) 100%);
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .slides-container {
+      position: fixed;
+      inset: 0;
+      z-index: 3;
+      pointer-events: none;
+      perspective: 1200px;
+    }
+
+    .slide {
+      position: absolute;
+      opacity: 0;
+      visibility: hidden;
+      transition: transform 0.75s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.65s ease;
+      transform: rotateY(-28deg) translateY(28px) scale(0.94);
+      transform-origin: center center;
+    }
+
+    .slide.active {
+      opacity: 1;
+      visibility: visible;
+      transform: rotateY(0deg) translateY(0) scale(1);
+    }
+
+    /* الشريحة 1: العنوان في الأسفل كما في الفيديو */
+    .slide-1 {
+      bottom: 17%;
+      left: 0;
+      right: 0;
+      text-align: center;
+      padding: 0 18px;
+    }
+
+    .slide-1 h1 {
+      font-size: clamp(2.1rem, 8vw, 4.8rem);
+      font-weight: 800;
+      letter-spacing: -1px;
+      text-shadow: 0 10px 35px rgba(0, 0, 0, 0.95), 0 0 28px rgba(239, 68, 68, 0.55);
+    }
+
+    .slide-1 .sub {
+      font-size: clamp(0.75rem, 3vw, 0.95rem);
+      color: rgba(255, 255, 255, 0.72);
+      margin-top: 6px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    /* الشرائح الداخلية على الشاشات الكبيرة */
+    .slide-2, .slide-3, .slide-4 {
+      top: 50%;
+      width: min(440px, 42vw);
+      background: linear-gradient(145deg, rgba(24, 6, 10, 0.78), rgba(10, 2, 4, 0.55));
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      padding: 28px;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.65);
+    }
+
+    .slide-2 {
+      right: 6%;
+      border-left: 4px solid #ef4444;
+      transform: translateY(-50%) rotateY(22deg) translateX(30px);
+    }
+    .slide-2.active {
+      transform: translateY(-50%) rotateY(0deg) translateX(0);
+    }
+
+    .slide-3 {
+      left: 6%;
+      border-right: 4px solid #3b82f6;
+      transform: translateY(-50%) rotateY(-22deg) translateX(-30px);
+    }
+    .slide-3.active {
+      transform: translateY(-50%) rotateY(0deg) translateX(0);
+    }
+
+    .slide-4 {
+      left: 6%;
+      border-top: 4px solid #f43f5e;
+      transform: translateY(-50%) rotateX(18deg);
+    }
+    .slide-4.active {
+      transform: translateY(-50%) rotateX(0deg);
+    }
+
+    .slide h2 {
+      font-size: clamp(1.35rem, 5vw, 2.3rem);
+      font-weight: 700;
+      margin-bottom: 10px;
+      background: linear-gradient(to right, #ffffff, #fca5a5);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .slide p {
+      font-size: clamp(0.85rem, 3.6vw, 1.05rem);
+      line-height: 1.65;
+      color: rgba(255, 255, 255, 0.88);
+      font-weight: 300;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .stat-card {
+      background: rgba(255, 255, 255, 0.06);
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .stat-card span {
+      display: block;
+      font-size: clamp(1rem, 4vw, 1.25rem);
+      font-weight: 700;
+      color: #f87171;
+    }
+
+    .stat-card small {
+      font-size: 0.72rem;
+      color: rgba(255, 255, 255, 0.65);
+    }
+
+    /* أزرار علوية خفيفة */
+    .top-bar {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      left: 14px;
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 8px;
+      pointer-events: auto;
+    }
+
+    .pill-btn {
+      background: rgba(18, 6, 9, 0.78);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      color: #fff;
+      padding: 7px 13px;
+      border-radius: 25px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+
+    .pill-btn:active, .pill-btn:hover {
+      background: #ef4444;
+      border-color: #ef4444;
+    }
+
+    /* شريط التنقل السفلي */
+    .hud-controls {
+      position: fixed;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(18, 6, 9, 0.82);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      padding: 8px 16px;
+      border-radius: 50px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.75);
+      max-width: 94vw;
+    }
+
+    .hud-btn {
+      background: rgba(255, 255, 255, 0.09);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      color: #fff;
+      padding: 7px 14px;
+      border-radius: 25px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .hud-btn:active, .hud-btn:hover {
+      background: #ef4444;
+      border-color: #ef4444;
+    }
+
+    .dots {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.28);
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+
+    .dot.active {
+      background: #ef4444;
+      width: 20px;
+      border-radius: 10px;
+    }
+
+    /* تنسيق خاص بشاشات الموبايل الطولية */
+    @media (max-width: 768px) {
+      .slide-1 {
+        bottom: 18%;
+      }
+
+      .slide-2, .slide-3, .slide-4 {
+        top: auto;
+        bottom: 84px;
+        left: 14px;
+        right: 14px;
+        width: auto;
+        padding: 18px 20px;
+        border-radius: 18px;
+        border-left: none;
+        border-right: none;
+        border-top: 3px solid #ef4444;
+        transform: translateY(24px) rotateX(-12deg);
+      }
+
+      .slide-2.active, .slide-3.active, .slide-4.active {
+        transform: translateY(0) rotateX(0deg);
+      }
+
+      .slide h2 {
+        margin-bottom: 6px;
+      }
+
+      .slide p {
+        line-height: 1.55;
+      }
+
+      .stats-grid {
+        margin-top: 10px;
+        gap: 8px;
+      }
+
+      .stat-card {
+        padding: 8px 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="webgl-canvas"></canvas>
+  <div class="vignette"></div>
+
+  <!-- طبقة التقليب السريع -->
+  <div class="flip-curtain">
+    <div class="flip-plane" id="flip-plane"></div>
+  </div>
+
+  <div class="top-bar">
+    <div class="top-actions">
+      <button class="pill-btn" id="audio-toggle">🔊 Pulse: OFF</button>
+      <button class="pill-btn" id="cutaway-toggle">🔬 Cutaway</button>
+    </div>
+  </div>
+
+  <div class="slides-container">
+    <!-- Slide 1: لقطة البداية القريبة من الصمامات بعد التقليب -->
+    <div class="slide slide-1 active" id="slide-0">
+      <h1>The Human Heart</h1>
+      <div class="sub">Swipe or Tap Next • 3D Flip View</div>
+    </div>
+
+    <!-- Slide 2 -->
+    <div class="slide slide-2" id="slide-1">
+      <h2>Location and Size</h2>
+      <p>
+        The human heart is a vital muscular organ in the circulatory system, pumping blood throughout the body to deliver oxygen and nutrients while removing waste.
+      </p>
+      <div class="stats-grid">
+        <div class="stat-card"><span>~100,000</span><small>Beats / day</small></div>
+        <div class="stat-card"><span>5 Liters</span><small>Blood / min</small></div>
+      </div>
+    </div>
+
+    <!-- Slide 3 -->
+    <div class="slide slide-3" id="slide-2">
+      <h2>Blood Circulation Pathway</h2>
+      <p>
+        In the double circulatory system, deoxygenated blood enters the right side to reach the lungs, then returns oxygenated to the left side to pump body-wide.
+      </p>
+    </div>
+
+    <!-- Slide 4 -->
+    <div class="slide slide-4" id="slide-3">
+      <h2>Chambers & Valves</h2>
+      <p>
+        Four chambers, valves, and chordae tendineae work together to keep blood flowing in one direction with every heartbeat.
+      </p>
+    </div>
+  </div>
+
+  <div class="hud-controls">
+    <button class="hud-btn" id="prev-slide">← Prev</button>
+    <div class="dots" id="dots-container">
+      <div class="dot active" onclick="goToSlide(0)"></div>
+      <div class="dot" onclick="goToSlide(1)"></div>
+      <div class="dot" onclick="goToSlide(2)"></div>
+      <div class="dot" onclick="goToSlide(3)"></div>
+    </div>
+    <button class="hud-btn" id="next-slide">Next →</button>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    const isMobile = () => window.innerWidth <= 768;
+
+    const canvas = document.getElementById('webgl-canvas');
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x090204, 0.045);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 0.08, 1.65);
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    // تحديد pixelRatio بحد أقصى 2 لسرعة الأداء على الموبايل
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.25;
+
+    scene.add(new THREE.AmbientLight(0x3a0d12, 1.45));
+
+    const redLight = new THREE.PointLight(0xff2a3c, 3.2, 18);
+    redLight.position.set(3, 3, 4);
+    scene.add(redLight);
+
+    const blueLight = new THREE.PointLight(0x2563eb, 2.4, 15);
+    blueLight.position.set(-4, 2, 2);
+    scene.add(blueLight);
+
+    const heartGroup = new THREE.Group();
+    scene.add(heartGroup);
+
+    const muscleMat = new THREE.MeshPhysicalMaterial({
+      color: 0x8b111b,
+      emissive: 0x240306,
+      roughness: 0.28,
+      metalness: 0.05,
+      clearcoat: 0.85,
+      clearcoatRoughness: 0.18,
+      side: THREE.DoubleSide
+    });
+
+    const veinMat = new THREE.MeshPhysicalMaterial({
+      color: 0x1d4ed8,
+      emissive: 0x07153b,
+      roughness: 0.3,
+      clearcoat: 0.8
+    });
+
+    const arteryMat = new THREE.MeshPhysicalMaterial({
+      color: 0xdc2626,
+      emissive: 0x3b0707,
+      roughness: 0.25,
+      clearcoat: 0.9
+    });
+
+    const valveMat = new THREE.MeshPhysicalMaterial({
+      color: 0xf8fafc,
+      emissive: 0x334155,
+      roughness: 0.35,
+      clearcoat: 0.6
+    });
+
+    // نحت جسم القلب الرئيسي
+    const mainGeo = new THREE.SphereGeometry(1.15, isMobile() ? 32 : 48, isMobile() ? 32 : 48);
+    const pos = mainGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      let x = pos.getX(i);
+      let y = pos.getY(i);
+      let z = pos.getZ(i);
+      if (y < 0) {
+        const taper = Math.max(0.25, 1 + y * 0.48);
+        x = x * taper + y * 0.28;
+        z *= taper;
+      }
+      const wave = Math.sin(x * 6) * Math.cos(y * 6) * 0.03;
+      pos.setXYZ(i, x * 0.92 + wave, y * 1.28, z * 0.82 + wave);
+    }
+    mainGeo.computeVertexNormals();
+    const mainHeart = new THREE.Mesh(mainGeo, muscleMat);
+    mainHeart.position.set(0.1, -0.25, 0);
+    heartGroup.add(mainHeart);
+
+    const rightVent = new THREE.Mesh(new THREE.SphereGeometry(0.88, 28, 28), muscleMat);
+    rightVent.scale.set(0.85, 1.15, 0.75);
+    rightVent.position.set(-0.42, -0.2, 0.22);
+    rightVent.rotation.z = 0.25;
+    heartGroup.add(rightVent);
+
+    const rAtrium = new THREE.Mesh(new THREE.SphereGeometry(0.55, 24, 24), veinMat);
+    rAtrium.position.set(-0.68, 0.55, 0.05);
+    heartGroup.add(rAtrium);
+
+    const lAtrium = new THREE.Mesh(new THREE.SphereGeometry(0.52, 24, 24), arteryMat);
+    lAtrium.position.set(0.65, 0.62, -0.1);
+    heartGroup.add(lAtrium);
+
+    const aortaCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0.05, 0.5, 0.05),
+      new THREE.Vector3(0.0, 1.35, 0.0),
+      new THREE.Vector3(0.35, 1.65, -0.15),
+      new THREE.Vector3(0.65, 1.15, -0.35),
+      new THREE.Vector3(0.55, -0.6, -0.45)
+    ]);
+    heartGroup.add(new THREE.Mesh(new THREE.TubeGeometry(aortaCurve, 36, 0.24, 16, false), arteryMat));
+
+    for (let i = 0; i < 3; i++) {
+      const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.075, 0.55, 14), arteryMat);
+      branch.position.set(0.05 + i * 0.18, 1.75, -0.05 - i * 0.05);
+      branch.rotation.z = -0.15 * i;
+      heartGroup.add(branch);
+    }
+
+    const svc = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 1.1, 16), veinMat);
+    svc.position.set(-0.65, 1.25, 0.05);
+    heartGroup.add(svc);
+
+    const ivc = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.9, 16), veinMat);
+    ivc.position.set(-0.62, -1.0, -0.05);
+    heartGroup.add(ivc);
+
+    const pulmCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-0.25, 0.4, 0.25),
+      new THREE.Vector3(-0.15, 1.15, 0.25),
+      new THREE.Vector3(-0.75, 1.3, 0.15)
+    ]);
+    heartGroup.add(new THREE.Mesh(new THREE.TubeGeometry(pulmCurve, 24, 0.19, 14, false), veinMat));
+
+    // الصمامات والأوتار القلبية الداخلية
+    const internalGroup = new THREE.Group();
+    heartGroup.add(internalGroup);
+
+    const cavity = new THREE.Mesh(
+      new THREE.SphereGeometry(0.75, 24, 24),
+      new THREE.MeshStandardMaterial({ color: 0x450a0a, roughness: 0.4, side: THREE.BackSide })
+    );
+    cavity.position.set(0.05, -0.1, 0.35);
+    internalGroup.add(cavity);
+
+    function createValve(x, y, z, scale = 1) {
+      const grp = new THREE.Group();
+      grp.position.set(x, y, z);
+      grp.scale.setScalar(scale);
+
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.045, 14, 24), valveMat);
+      ring.rotation.x = Math.PI / 2.2;
+      grp.add(ring);
+
+      for (let i = 0; i < 3; i++) {
+        const angle = (i * Math.PI * 2) / 3;
+        const leaflet = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.22, 10), valveMat);
+        leaflet.position.set(Math.cos(angle) * 0.09, -0.06, Math.sin(angle) * 0.09);
+        leaflet.rotation.x = Math.PI;
+        leaflet.rotation.z = Math.cos(angle) * 0.3;
+        grp.add(leaflet);
+
+        for (let j = -1; j <= 1; j++) {
+          const cordLine = new THREE.LineCurve3(
+            new THREE.Vector3(Math.cos(angle) * 0.1, -0.12, Math.sin(angle) * 0.1),
+            new THREE.Vector3(Math.cos(angle + j * 0.2) * 0.18, -0.58, Math.sin(angle + j * 0.2) * 0.15)
+          );
+          grp.add(new THREE.Mesh(new THREE.TubeGeometry(cordLine, 5, 0.012, 6, false), valveMat));
+        }
+      }
+      return grp;
+    }
+
+    const valveA = createValve(-0.22, 0.18, 0.52, 1.15);
+    const valveB = createValve(0.28, 0.22, 0.48, 1.05);
+    const valveC = createValve(0.02, 0.48, 0.42, 0.75);
+    internalGroup.add(valveA, valveB, valveC);
+
+    // جزيئات الخلفية
+    const count = isMobile() ? 140 : 240;
+    const pGeo = new THREE.BufferGeometry();
+    const pPos = new Float32Array(count * 3);
+    for (let i = 0; i < count * 3; i++) pPos[i] = (Math.random() - 0.5) * 15;
+    pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+    const bloodCells = new THREE.Points(
+      pGeo,
+      new THREE.PointsMaterial({ color: 0xff3b4e, size: 0.07, transparent: true, opacity: 0.65 })
+    );
+    scene.add(bloodCells);
+
+    // حالات الكاميرا والقلب (متجاوبة مع الموبايل والكمبيوتر)
+    function getSlideState(index) {
+      const mobile = isMobile();
+      if (index === 0) {
+        return {
+          camPos: new THREE.Vector3(0.02, 0.08, mobile ? 1.85 : 1.55),
+          heartPos: new THREE.Vector3(0, mobile ? 0.14 : 0.1, 0),
+          heartRot: new THREE.Euler(0.12, -0.05, 0),
+          cutaway: true
+        };
+      }
+      if (index === 1) {
+        return {
+          camPos: new THREE.Vector3(0, mobile ? -0.15 : 0.1, mobile ? 5.2 : 4.3),
+          heartPos: new THREE.Vector3(mobile ? 0 : -1.35, mobile ? 0.65 : -0.1, 0),
+          heartRot: new THREE.Euler(0.08, 0.45, -0.08),
+          cutaway: false
+        };
+      }
+      if (index === 2) {
+        return {
+          camPos: new THREE.Vector3(0, mobile ? -0.15 : 0.05, mobile ? 5.0 : 4.1),
+          heartPos: new THREE.Vector3(mobile ? 0 : 1.35, mobile ? 0.65 : -0.1, 0),
+          heartRot: new THREE.Euler(0.1, -0.35, 0.05),
+          cutaway: true
+        };
+      }
+      return {
+        camPos: new THREE.Vector3(mobile ? 0 : 0.2, mobile ? 0.1 : 0.45, mobile ? 4.4 : 3.3),
+        heartPos: new THREE.Vector3(mobile ? 0 : 0.95, mobile ? 0.6 : -0.15, 0),
+        heartRot: new THREE.Euler(0.28, -0.25, 0),
+        cutaway: true
+      };
+    }
+
+    const totalSlides = 4;
+    let currentSlide = 0;
+    let isCutaway = true;
+
+    const targetCamPos = new THREE.Vector3();
+    const targetHeartPos = new THREE.Vector3();
+    const targetHeartRot = new THREE.Euler();
+
+    function applyCutaway(state) {
+      isCutaway = state;
+      muscleMat.transparent = isCutaway;
+      muscleMat.opacity = isCutaway ? 0.32 : 1.0;
+      internalGroup.visible = isCutaway;
+    }
+
+    function triggerFlipEffect() {
+      const plane = document.getElementById('flip-plane');
+      plane.classList.remove('animating');
+      void plane.offsetWidth;
+      plane.classList.add('animating');
+      // لفة سريعة في زاوية القلب تحاكي التقليب
+      heartGroup.rotation.y += 0.65;
+    }
+
+    function syncTransformTargets(snap = false) {
+      const st = getSlideState(currentSlide);
+      targetCamPos.copy(st.camPos);
+      targetHeartPos.copy(st.heartPos);
+      targetHeartRot.copy(st.heartRot);
+      applyCutaway(st.cutaway);
+
+      if (snap) {
+        camera.position.copy(targetCamPos);
+        heartGroup.position.copy(targetHeartPos);
+        heartGroup.rotation.copy(targetHeartRot);
+      }
+    }
+
+    function goToSlide(index, withFlip = true) {
+      if (index < 0 || index >= totalSlides) return;
+      currentSlide = index;
+
+      document.querySelectorAll('.slide').forEach((el, i) => el.classList.toggle('active', i === currentSlide));
+      document.querySelectorAll('.dot').forEach((el, i) => el.classList.toggle('active', i === currentSlide));
+
+      if (withFlip) triggerFlipEffect();
+      syncTransformTargets(false);
+    }
+
+    // تهيئة البداية بلقطة تقليب افتتاحية شبيهة بالفيديو
+    syncTransformTargets(true);
+    setTimeout(() => triggerFlipEffect(), 120);
+
+    document.getElementById('next-slide').addEventListener('click', () => goToSlide((currentSlide + 1) % totalSlides));
+    document.getElementById('prev-slide').addEventListener('click', () => goToSlide((currentSlide - 1 + totalSlides) % totalSlides));
+    document.getElementById('cutaway-toggle').addEventListener('click', () => applyCutaway(!isCutaway));
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') goToSlide((currentSlide + 1) % totalSlides);
+      if (e.key === 'ArrowLeft') goToSlide((currentSlide - 1 + totalSlides) % totalSlides);
+    });
+
+    // دعم اللمس (Swipe للتقليب + Drag لتدوير القلب) والماوس
+    let pointerDown = false;
+    let startX = 0, startY = 0;
+    let lastX = 0, lastY = 0;
+    let totalDragX = 0;
+
+    function onPointerStart(x, y) {
+      pointerDown = true;
+      startX = lastX = x;
+      startY = lastY = y;
+      totalDragX = 0;
+    }
+
+    function onPointerMove(x, y) {
+      if (!pointerDown) return;
+      const dx = x - lastX;
+      const dy = y - lastY;
+      totalDragX += Math.abs(dx);
+      targetHeartRot.y += dx * 0.009;
+      targetHeartRot.x += dy * 0.007;
+      lastX = x;
+      lastY = y;
+    }
+
+    function onPointerEnd(x) {
+      if (!pointerDown) return;
+      pointerDown = false;
+      const swipeDelta = x - startX;
+      // سحب أفقي سريع على الموبايل لتقليب الشريحة
+      if (Math.abs(swipeDelta) > 65 && totalDragX > 45) {
+        if (swipeDelta < 0) goToSlide((currentSlide + 1) % totalSlides);
+        else goToSlide((currentSlide - 1 + totalSlides) % totalSlides);
+      }
+    }
+
+    canvas.addEventListener('mousedown', (e) => onPointerStart(e.clientX, e.clientY));
+    window.addEventListener('mousemove', (e) => onPointerMove(e.clientX, e.clientY));
+    window.addEventListener('mouseup', (e) => onPointerEnd(e.clientX));
+
+    canvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) onPointerStart(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+
+    canvas.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 1) onPointerMove(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+
+    canvas.addEventListener('touchend', (e) => {
+      const endX = e.changedTouches[0] ? e.changedTouches[0].clientX : lastX;
+      onPointerEnd(endX);
+    }, { passive: true });
+
+    // صوت نبض القلب
+    let audioOn = false;
+    let audioCtx = null;
+
+    function triggerPulseSound() {
+      if (!audioOn) return;
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+
+      const now = audioCtx.currentTime;
+      const beat = (t, freq, vol) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, t);
+        osc.frequency.exponentialRampToValueAtTime(22, t + 0.15);
+        gain.gain.setValueAtTime(0.001, t);
+        gain.gain.linearRampToValueAtTime(vol, t + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.17);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.19);
+      };
+      beat(now, 65, 0.24);
+      beat(now + 0.24, 52, 0.17);
+    }
+
+    document.getElementById('audio-toggle').addEventListener('click', (e) => {
+      audioOn = !audioOn;
+      e.target.textContent = audioOn ? '🔊 Pulse: ON' : '🔊 Pulse: OFF';
+    });
+
+    const clock = new THREE.Clock();
+    let lastCycle = -1;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+
+      const period = 0.95;
+      const cycle = Math.floor(t / period);
+      const phase = (t % period) / period;
+
+      if (cycle !== lastCycle) {
+        lastCycle = cycle;
+        triggerPulseSound();
+      }
+
+      let scale = 1.0;
+      if (phase < 0.15) scale = 1.0 + Math.sin((phase / 0.15) * Math.PI) * 0.065;
+      else if (phase > 0.22 && phase < 0.36) scale = 1.0 + Math.sin(((phase - 0.22) / 0.14) * Math.PI) * 0.04;
+
+      heartGroup.scale.setScalar(scale);
+      valveA.scale.setScalar(1.15 - (scale - 1) * 2.2);
+      valveB.scale.setScalar(1.05 - (scale - 1) * 2.2);
+
+      camera.position.lerp(targetCamPos, 0.07);
+      heartGroup.position.lerp(targetHeartPos, 0.07);
+      heartGroup.rotation.x += (targetHeartRot.x - heartGroup.rotation.x) * 0.07;
+      heartGroup.rotation.y += (targetHeartRot.y + Math.sin(t * 0.7) * 0.06 - heartGroup.rotation.y) * 0.07;
+      heartGroup.rotation.z += (targetHeartRot.z - heartGroup.rotation.z) * 0.07;
+
+      bloodCells.rotation.y = t * 0.04;
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      syncTransformTargets(false);
+    });
+  </script>
+</body>
+</html>
